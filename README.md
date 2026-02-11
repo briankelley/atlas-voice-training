@@ -6,7 +6,7 @@ Train your own custom wake word model for [OpenWakeWord](https://github.com/dscr
 
 This project exists because training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that have since aged out of compatibility with modern Python. The `train.sh` script in this repo documents every fix discovered through days of debugging. The Docker image freezes the working environment of openWakeWord to commit 368c037 (main on February 1, 2026).
 
-tl;dr I didn't want to say "Hey Jarvis" to my computer.
+tl;dr I didn't want to say "Hey Jarvis" to my computer and the original openwakeword training process wasn't actively maintained. I fixed it.
 
 ## Objective
 
