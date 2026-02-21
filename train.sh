@@ -112,6 +112,13 @@ echo ""
 
 # Prerequisites: Check and install system dependencies
 echo "[Prerequisites] Checking system dependencies..."
+
+# Disable cdrom apt source if present (invalid on live USB boot, no-op on installed systems)
+if grep -q '^deb cdrom:' /etc/apt/sources.list 2>/dev/null; then
+    echo "  Disabling cdrom apt source (live USB detected)..."
+    sudo sed -i '/^deb cdrom:/s/^/#/' /etc/apt/sources.list
+fi
+
 MISSING_PKGS=""
 
 if ! command -v espeak-ng &> /dev/null; then
