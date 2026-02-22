@@ -128,15 +128,16 @@ if [ "${STANDALONE:-0}" == "1" ]; then
     echo "[Standalone Mode] Downloading training data..."
     echo ""
 
-    TARBALL_URL="${TARBALL_URL:-https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/atlas-voice-training-data.tar.gz}"
+    TARBALL_URL="${TARBALL_URL:-https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/archive/atlas-voice-training-data.tar.gz}"
     TARBALL_FILE="/tmp/atlas-voice-training-data.tar.gz"
 
     # -------------------------------------------------------------------------
-    # Download tarball (~20GB)
+    # Download tarball (~20GB) — contains all training data including MIT RIRs
     # -------------------------------------------------------------------------
     if [ -f "$WORKSPACE/openwakeword_features_ACAV100M_2000_hrs_16bit.npy" ] && \
        [ -f "$WORKSPACE/validation_set_features.npy" ] && \
-       [ -d "$WORKSPACE/musan_music" ]; then
+       [ -d "$WORKSPACE/musan_music" ] && \
+       [ -d "$WORKSPACE/mit_rirs" ]; then
         echo "  Training data already extracted. Skipping download."
     else
         echo "  Downloading training data tarball (~20GB)..."
@@ -152,37 +153,14 @@ if [ "${STANDALONE:-0}" == "1" ]; then
     echo ""
 
     # -------------------------------------------------------------------------
-    # Download MIT Room Impulse Responses (~300MB)
-    # Source: MIT directly (avoids HuggingFace rate limits)
-    # Original files are 32kHz - must convert to 16kHz for training
+    # Verify MIT RIRs (bundled in tarball, pre-converted to 16kHz)
     # -------------------------------------------------------------------------
     if [ -d "$WORKSPACE/mit_rirs" ] && [ -n "$(ls -A $WORKSPACE/mit_rirs/*.wav 2>/dev/null)" ]; then
-        echo "  MIT RIRs already present. Skipping download."
+        echo "  MIT RIRs present from tarball extraction."
     else
-        echo "  Downloading MIT Room Impulse Responses (~300MB)..."
-        echo "  Source: https://mcdermottlab.mit.edu"
-        echo ""
-        MIT_ZIP="/tmp/mit_rirs.zip"
-        MIT_TEMP="/tmp/mit_rirs_raw"
-        mkdir -p "$WORKSPACE/mit_rirs" "$MIT_TEMP"
-
-        wget --progress=bar:force:noscroll -O "$MIT_ZIP" \
-            "https://mcdermottlab.mit.edu/Reverb/IRMAudio/Audio.zip"
-        echo ""
-
-        echo "  Extracting..."
-        unzip -q -o "$MIT_ZIP" -d "$MIT_TEMP"
-
-        echo "  Converting to 16kHz mono (required for training)..."
-        WAV_COUNT=0
-        for f in $(find "$MIT_TEMP" -name "*.wav" -type f); do
-            BASENAME=$(basename "$f")
-            ffmpeg -y -loglevel error -i "$f" -ar 16000 -ac 1 "$WORKSPACE/mit_rirs/$BASENAME"
-            WAV_COUNT=$((WAV_COUNT + 1))
-        done
-
-        rm -rf "$MIT_ZIP" "$MIT_TEMP"
-        echo "  Converted $WAV_COUNT room impulse responses to 16kHz."
+        echo "  ERROR: MIT RIRs not found after tarball extraction."
+        echo "  The tarball may be corrupt or from an older version."
+        exit 1
     fi
     echo ""
 
@@ -199,31 +177,14 @@ else
         fi
     done
 
-    # Handle MIT RIRs - check if in /data or need to download
+    # Handle MIT RIRs - must be in /data mount (bundled in tarball extraction)
     if [ -d "/data/mit_rirs" ] && [ -n "$(ls -A /data/mit_rirs/*.wav 2>/dev/null)" ]; then
         ln -sf /data/mit_rirs "$WORKSPACE/mit_rirs"
         echo "  Linked: mit_rirs"
     else
-        echo "  MIT RIRs not found in /data. Downloading from MIT..."
-        mkdir -p "$WORKSPACE/mit_rirs"
-        MIT_ZIP="/tmp/mit_rirs.zip"
-        MIT_TEMP="/tmp/mit_rirs_raw"
-        mkdir -p "$MIT_TEMP"
-
-        wget --progress=bar:force:noscroll -O "$MIT_ZIP" \
-            "https://mcdermottlab.mit.edu/Reverb/IRMAudio/Audio.zip"
-
-        unzip -q -o "$MIT_ZIP" -d "$MIT_TEMP"
-
-        WAV_COUNT=0
-        for f in $(find "$MIT_TEMP" -name "*.wav" -type f); do
-            BASENAME=$(basename "$f")
-            ffmpeg -y -loglevel error -i "$f" -ar 16000 -ac 1 "$WORKSPACE/mit_rirs/$BASENAME"
-            WAV_COUNT=$((WAV_COUNT + 1))
-        done
-
-        rm -rf "$MIT_ZIP" "$MIT_TEMP"
-        echo "  Converted $WAV_COUNT room impulse responses to 16kHz."
+        echo "  ERROR: MIT RIRs not found in /data mount."
+        echo "  Extract the training data tarball first, which includes mit_rirs/."
+        exit 1
     fi
 fi
 

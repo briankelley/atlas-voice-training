@@ -22,7 +22,7 @@ OUTPUT_DIR="$SCRIPT_DIR/docker-output"
 mkdir -p "$OUTPUT_DIR"
 
 # Tarball download URL for standalone mode
-TARBALL_URL="${TARBALL_URL:-https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/atlas-voice-training-data.tar.gz}"
+TARBALL_URL="${TARBALL_URL:-https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/archive/atlas-voice-training-data.tar.gz}"
 
 # Parse arguments
 REBUILD=false

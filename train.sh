@@ -1,13 +1,9 @@
 #!/bin/bash
 # Train custom wake word model for OpenWakeWord
-# https://github.com/dscripka/openWakeWord
+# https://github.com/briankelley/openWakeWord
 #
-# Usage: ./train.sh [config.yml] [--tarball]
+# Usage: ./train.sh [config.yml]
 # Default config: hey_atlas_config.yml
-#
-# Options:
-#   --tarball    Download all training data as single archive (~20GB)
-#                instead of individual files. Faster if you have good bandwidth.
 #
 # Training data hosted at: https://huggingface.co/datasets/brianckelley/atlas-voice-training-data
 
@@ -44,12 +40,14 @@ fi
 HF_DATASET="brianckelley/atlas-voice-training-data"
 HF_BASE="https://huggingface.co/datasets/${HF_DATASET}/resolve/main"
 
+# Pinned commits for reproducibility (match Dockerfile.training)
+OPENWAKEWORD_COMMIT="368c03716d1e92591906a84949bc477f3a834455"
+PIPER_COMMIT="f1988a4d54eddb23d99e86f0adfef6226a85acc7"
+
 # Parse arguments
-USE_TARBALL=false
 CONFIG="hey_atlas_config.yml"
 for arg in "$@"; do
     case $arg in
-        --tarball) USE_TARBALL=true ;;
         *.yml|*.yaml) CONFIG="$arg" ;;
     esac
 done
@@ -68,7 +66,6 @@ echo "=============================================="
 echo "Started: $(date)"
 echo "Config: $CONFIG"
 echo "Model: $MODEL_NAME"
-echo "Tarball mode: $USE_TARBALL"
 echo ""
 echo "Training Parameters:"
 echo "  Samples: $N_SAMPLES (val: $N_SAMPLES_VAL)"
@@ -316,61 +313,78 @@ $PIP install "numpy<2.0" scipy tqdm
 echo "  [Step 0/6] DONE"
 echo ""
 
-# Ask about download method if not specified via --tarball flag
-if [ "$USE_TARBALL" = false ]; then
-    echo "=============================================="
-    echo "Download Method"
-    echo "=============================================="
-    echo "Training data can be downloaded as:"
-    echo "  1) Individual files (~25GB total, downloads only what's needed)"
-    echo "  2) Single tarball (~20GB archive, faster if you have good bandwidth)"
-    echo ""
-    read -p "Use tarball method? [y/N]: " tarball_choice
-    if [[ "$tarball_choice" =~ ^[Yy]$ ]]; then
-        USE_TARBALL=true
-    fi
-    echo ""
-fi
+# =============================================================================
+# Download training data
+# =============================================================================
+echo "=============================================="
+echo "Training Data Download"
+echo "=============================================="
+echo ""
+echo "Training requires a ~20GB data archive from HuggingFace."
+echo "This includes pre-computed audio features, background noise,"
+echo "room impulse responses, TTS model, and embedding models."
+echo ""
+echo "Source: https://huggingface.co/datasets/${HF_DATASET}"
+echo ""
+echo "Available disk: $(df -h . | tail -1 | awk '{print $4}')"
+echo "Required: ~45GB (archive + extracted files)"
+echo ""
 
-# Tarball option: download everything in one archive
-if [ "$USE_TARBALL" = true ]; then
-    echo "[Tarball Mode] Downloading all training data as single archive..."
+if [ -f "openwakeword_features_ACAV100M_2000_hrs_16bit.npy" ] && \
+   [ -f "validation_set_features.npy" ] && \
+   [ -d "musan_music" ] && \
+   [ -d "mit_rirs" ]; then
+    echo "Training data already extracted. Skipping download."
+else
+    read -p "Download and extract training data? [Y/n]: " dl_choice
+    if [[ "$dl_choice" =~ ^[Nn]$ ]]; then
+        echo "Cannot proceed without training data. Exiting."
+        exit 0
+    fi
+
     if [ ! -f "atlas-voice-training-data.tar.gz" ]; then
         echo "  Downloading tarball (~20GB)..."
-        wget -nv -O atlas-voice-training-data.tar.gz \
+        wget --progress=bar:force:noscroll -O atlas-voice-training-data.tar.gz \
             "${HF_BASE}/archive/atlas-voice-training-data.tar.gz"
     fi
 
     echo "  Extracting tarball..."
     tar -xzf atlas-voice-training-data.tar.gz
-
-    echo "  Tarball extracted. Continuing with dependency installation..."
-    echo ""
+    echo "  Tarball extracted."
 fi
+echo ""
 
 # Step 1: Install dependencies
 echo "[Step 1/6] Installing dependencies..."
 
-# Clone openWakeWord if needed
+# Clone openWakeWord if needed (pinned commit for reproducibility)
 if [ ! -d "openWakeWord" ]; then
     echo "  Cloning openWakeWord..."
-    git clone https://github.com/dscripka/openWakeWord
+    git clone https://github.com/briankelley/openWakeWord
+    cd openWakeWord && git checkout "$OPENWAKEWORD_COMMIT" && cd ..
 fi
 
-# Clone piper-sample-generator if needed
+# Clone piper-sample-generator if needed (pinned commit for reproducibility)
 if [ ! -d "piper-sample-generator" ]; then
-    echo "  Cloning piper-sample-generator (dscripka fork)..."
-    git clone https://github.com/dscripka/piper-sample-generator
+    echo "  Cloning piper-sample-generator..."
+    git clone https://github.com/briankelley/piper-sample-generator
+    cd piper-sample-generator && git checkout "$PIPER_COMMIT" && cd ..
     # Patch: change debug logging to info so batch progress is visible
     sed -i 's/_LOGGER.debug/_LOGGER.info/' piper-sample-generator/generate_samples.py
 fi
 
-# Download TTS model if needed
+# Move TTS model from tarball extraction into place
 if [ ! -f "piper-sample-generator/models/en-us-libritts-high.pt" ]; then
-    echo "  Downloading TTS model (~200MB)..."
     mkdir -p piper-sample-generator/models
-    wget -nv -O piper-sample-generator/models/en-us-libritts-high.pt \
-        "${HF_BASE}/piper_tts_model/en-us-libritts-high.pt"
+    if [ -f "piper_tts_model/en-us-libritts-high.pt" ]; then
+        echo "  Moving TTS model from tarball extraction..."
+        mv piper_tts_model/en-us-libritts-high.pt piper-sample-generator/models/en-us-libritts-high.pt
+        rmdir piper_tts_model 2>/dev/null || true
+    else
+        echo "  ERROR: TTS model not found. Tarball may be corrupt or incomplete."
+        echo "  Expected: piper_tts_model/en-us-libritts-high.pt"
+        exit 1
+    fi
 fi
 
 echo "  Installing PyTorch stack (pinned versions)..."
@@ -405,124 +419,68 @@ echo ""
 echo "  [Step 1/6] DONE"
 echo ""
 
-# Step 2: Download room impulse responses
-echo "[Step 2/6] Downloading room impulse responses..."
-if [ ! -d "mit_rirs" ] || [ -z "$(ls -A mit_rirs 2>/dev/null)" ]; then
-    rm -rf mit_rirs
-    mkdir -p mit_rirs
-    echo "  Downloading MIT RIRs from HuggingFace..."
-    # Use snapshot_download with tqdm progress (replaces deprecated huggingface-cli)
-    $PYTHON << 'EOF'
-from huggingface_hub import snapshot_download
-import shutil
-import os
-
-repo_id = "davidscripka/MIT_environmental_impulse_responses"
-temp_dir = "./mit_rirs_temp"
-
-# Download entire dataset with progress bar
-print("  Downloading (tqdm progress below)...")
-snapshot_download(
-    repo_id=repo_id,
-    repo_type="dataset",
-    local_dir=temp_dir,
-    local_dir_use_symlinks=False
-)
-
-# Move WAV files to mit_rirs and count them
-wav_count = 0
-for root, dirs, files in os.walk(temp_dir):
-    for f in files:
-        if f.endswith('.wav'):
-            src = os.path.join(root, f)
-            shutil.move(src, f"./mit_rirs/{f}")
-            wav_count += 1
-
-# Clean up temp directory
-shutil.rmtree(temp_dir, ignore_errors=True)
-print(f"  Saved {wav_count} room impulse responses")
-EOF
-    # Flatten directory structure - files may be in subdirectories like 16khz/
-    # Training code expects WAV files directly in mit_rirs/
-    find mit_rirs -name "*.wav" -type f -exec mv {} mit_rirs/ \; 2>/dev/null || true
-    find mit_rirs -type d -empty -delete 2>/dev/null || true
-    # Clean up huggingface cache directory (training code tries to load it as audio)
-    rm -rf mit_rirs/.cache
-else
-    echo "  MIT RIRs already downloaded."
+# Step 2: Verify room impulse responses (bundled in tarball)
+echo "[Step 2/6] Verifying room impulse responses..."
+if [ ! -d "mit_rirs" ] || [ -z "$(ls -A mit_rirs/*.wav 2>/dev/null)" ]; then
+    echo "  ERROR: MIT RIRs not found. Tarball may be corrupt or incomplete."
+    echo "  Expected: mit_rirs/ directory containing WAV files"
+    exit 1
 fi
-# Also clean up any .cache or subdirectories that might exist from previous runs
+MIT_COUNT=$(ls mit_rirs/*.wav 2>/dev/null | wc -l)
+echo "  Found $MIT_COUNT room impulse response files."
 rm -rf mit_rirs/.cache 2>/dev/null || true
 find mit_rirs -type d -empty -delete 2>/dev/null || true
 echo "  [Step 2/6] DONE"
 echo ""
 
-# Step 3: Download background audio (MUSAN music - pre-processed 16kHz)
-echo "[Step 3/6] Downloading background audio..."
+# Step 3: Verify background audio (bundled in tarball)
+echo "[Step 3/6] Verifying background audio..."
 if [ ! -d "musan_music" ] || [ -z "$(ls -A musan_music 2>/dev/null)" ]; then
-    rm -rf musan_music
-    echo "  Downloading MUSAN music (pre-processed 16kHz, ~4.6GB)..."
-    # Use snapshot_download with tqdm progress (replaces deprecated huggingface-cli)
-    $PYTHON << EOF
-from huggingface_hub import snapshot_download
-
-repo_id = "${HF_DATASET}"
-
-print("  Downloading (tqdm progress below)...")
-snapshot_download(
-    repo_id=repo_id,
-    repo_type="dataset",
-    allow_patterns="musan_music/**",
-    local_dir=".",
-    local_dir_use_symlinks=False
-)
-print("  MUSAN music downloaded.")
-EOF
-else
-    echo "  MUSAN music already downloaded."
+    echo "  ERROR: MUSAN music not found. Tarball may be corrupt or incomplete."
+    echo "  Expected: musan_music/ directory"
+    exit 1
 fi
+echo "  MUSAN music present."
 echo "  [Step 3/6] DONE"
 echo ""
 
-# Step 4: Download pre-computed features
-echo "[Step 4/6] Downloading pre-computed features..."
+# Step 4: Verify pre-computed features (bundled in tarball)
+echo "[Step 4/6] Verifying pre-computed features..."
 if [ ! -f "openwakeword_features_ACAV100M_2000_hrs_16bit.npy" ]; then
-    echo "  Downloading ACAV100M features (~17GB)..."
-    echo "  This is the largest download - please be patient..."
-    wget --progress=bar:force:noscroll \
-        "${HF_BASE}/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"
-else
-    echo "  ACAV100M features already downloaded."
+    echo "  ERROR: ACAV100M features not found. Tarball may be corrupt or incomplete."
+    exit 1
 fi
+echo "  ACAV100M features present ($(du -h openwakeword_features_ACAV100M_2000_hrs_16bit.npy | cut -f1))."
 
 if [ ! -f "validation_set_features.npy" ]; then
-    echo "  Downloading validation features (~177MB)..."
-    wget -nv \
-        "${HF_BASE}/validation_set_features.npy"
-else
-    echo "  Validation features already downloaded."
+    echo "  ERROR: Validation features not found. Tarball may be corrupt or incomplete."
+    exit 1
 fi
+echo "  Validation features present ($(du -h validation_set_features.npy | cut -f1))."
 echo "  [Step 4/6] DONE"
 echo ""
 
-# Step 5: Download embedding models
-echo "[Step 5/6] Downloading embedding models..."
+# Step 5: Set up embedding models (bundled in tarball)
+echo "[Step 5/6] Setting up embedding models..."
 MODELS_DIR="./openWakeWord/openwakeword/resources/models"
 mkdir -p "$MODELS_DIR"
 
 if [ ! -f "$MODELS_DIR/embedding_model.onnx" ]; then
-    echo "  Downloading embedding_model.onnx..."
-    wget -nv -O "$MODELS_DIR/embedding_model.onnx" \
-        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx"
-    echo "  Downloading embedding_model.tflite..."
-    wget -nv -O "$MODELS_DIR/embedding_model.tflite" \
-        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.tflite"
-    echo "  Downloading melspectrogram.onnx..."
-    wget -nv -O "$MODELS_DIR/melspectrogram.onnx" \
-        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx"
-    echo "  Downloading melspectrogram.tflite..."
-    wget -nv -O "$MODELS_DIR/melspectrogram.tflite" \
-        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.tflite"
+    if [ -d "embedding_models" ]; then
+        echo "  Moving embedding models from tarball extraction..."
+        for model_file in embedding_model.onnx embedding_model.tflite melspectrogram.onnx melspectrogram.tflite; do
+            if [ -f "embedding_models/$model_file" ]; then
+                mv "embedding_models/$model_file" "$MODELS_DIR/$model_file"
+            else
+                echo "  ERROR: Missing embedding_models/$model_file from tarball."
+                exit 1
+            fi
+        done
+        rmdir embedding_models 2>/dev/null || true
+    else
+        echo "  ERROR: embedding_models/ directory not found. Tarball may be corrupt."
+        exit 1
+    fi
 else
     echo "  Embedding models already present."
 fi

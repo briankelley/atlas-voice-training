@@ -1,6 +1,6 @@
 # OpenWakeWord Custom Wake Word Training (Dockerized)
 
-Train your own custom wake word model for [OpenWakeWord](https://github.com/dscripka/openWakeWord) (containerized).
+Train your own custom wake word model for [OpenWakeWord](https://github.com/briankelley/openWakeWord) (containerized).
 
 ## The Dependency Problem
 
@@ -64,7 +64,7 @@ The trained model handles wake word detection only. To build a full voice input 
 
 | Package | Purpose |
 |---------|---------|
-| [OpenWakeWord](https://github.com/dscripka/openWakeWord) | Loads the `.tflite` model and listens for the wake word |
+| [OpenWakeWord](https://github.com/briankelley/openWakeWord) | Loads the `.tflite` model and listens for the wake word |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | Speech-to-text transcription after the wake word triggers |
 | [sounddevice](https://python-sounddevice.readthedocs.io/) | Audio capture from your microphone |
 
@@ -101,10 +101,12 @@ Training data is hosted on [HuggingFace](https://huggingface.co/datasets/brianck
 |------|------|---------|
 | ACAV100M features | 17 GB | 2,000 hours of pre-computed negative examples |
 | MUSAN music | 4.6 GB | Background audio for augmentation |
+| MIT Room Impulse Responses | 300 MB | Room reverb simulation (pre-converted to 16kHz) |
 | Validation features | 177 MB | False positive testing during training |
 | Piper TTS model | 200 MB | Synthetic speech generation |
+| Embedding models | ~10 MB | OpenWakeWord melspectrogram and embedding inference |
 
-MIT Room Impulse Responses (~300MB) are downloaded separately from [MIT](https://mcdermottlab.mit.edu/Reverb/IRMAudio/Audio.zip) and converted to 16kHz automatically.
+All training data is bundled in a single ~20GB tarball and downloaded automatically.
 
 ## How It Works
 
@@ -150,7 +152,8 @@ The output is an ONNX model and a TFLite model, both under 250KB.
 
 ## Acknowledgments
 
-- [OpenWakeWord](https://github.com/dscripka/openWakeWord) by David Scripka
+- [OpenWakeWord](https://github.com/dscripka/openWakeWord) by David Scripka (this repo uses a [pinned fork](https://github.com/briankelley/openWakeWord))
+- [Piper Sample Generator](https://github.com/dscripka/piper-sample-generator) by David Scripka ([pinned fork](https://github.com/briankelley/piper-sample-generator))
 - [Piper TTS](https://github.com/rhasspy/piper) by Rhasspy
 - [MUSAN](https://www.openslr.org/17/) corpus
 - [MIT Room Impulse Responses](https://mcdermottlab.mit.edu/Reverb/IRMAudio/Audio.zip)

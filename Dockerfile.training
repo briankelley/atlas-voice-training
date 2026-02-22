@@ -92,28 +92,28 @@ RUN python3.10 -m pip install \
     pyyaml \
     huggingface_hub
 
-# Clone openWakeWord (pinned to known working commit)
-RUN git clone https://github.com/dscripka/openWakeWord /app/openWakeWord \
+# Clone openWakeWord (pinned to known working commit, from owned fork)
+RUN git clone https://github.com/briankelley/openWakeWord /app/openWakeWord \
     && cd /app/openWakeWord && git checkout 368c03716d1e92591906a84949bc477f3a834455 \
     && python3.10 -m pip install -e /app/openWakeWord
 
-# Clone piper-sample-generator (pinned to known working commit) and patch for progress logging
-RUN git clone https://github.com/dscripka/piper-sample-generator /app/piper-sample-generator \
+# Clone piper-sample-generator (pinned to known working commit, from owned fork) and patch for progress logging
+RUN git clone https://github.com/briankelley/piper-sample-generator /app/piper-sample-generator \
     && cd /app/piper-sample-generator && git checkout f1988a4d54eddb23d99e86f0adfef6226a85acc7 \
     && sed -i 's/_LOGGER.debug/_LOGGER.info/' /app/piper-sample-generator/generate_samples.py
 
-# Download embedding models
+# Download embedding models (from owned HuggingFace dataset)
 RUN mkdir -p /app/openWakeWord/openwakeword/resources/models \
     && wget -q -O /app/openWakeWord/openwakeword/resources/models/embedding_model.onnx \
-        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx" \
+        "https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/embedding_models/embedding_model.onnx" \
     && wget -q -O /app/openWakeWord/openwakeword/resources/models/embedding_model.tflite \
-        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.tflite" \
+        "https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/embedding_models/embedding_model.tflite" \
     && wget -q -O /app/openWakeWord/openwakeword/resources/models/melspectrogram.onnx \
-        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx" \
+        "https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/embedding_models/melspectrogram.onnx" \
     && wget -q -O /app/openWakeWord/openwakeword/resources/models/melspectrogram.tflite \
-        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.tflite"
+        "https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/embedding_models/melspectrogram.tflite"
 
-# Download TTS model for piper-sample-generator
+# Download TTS model for piper-sample-generator (from owned HuggingFace dataset)
 RUN mkdir -p /app/piper-sample-generator/models \
     && wget -q -O /app/piper-sample-generator/models/en-us-libritts-high.pt \
         "https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/piper_tts_model/en-us-libritts-high.pt"
