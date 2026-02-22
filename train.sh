@@ -411,6 +411,13 @@ $PIP install -e ./openWakeWord
 echo "  Verifying openWakeWord..."
 $PYTHON -c "import openwakeword; print(f'    openwakeword installed')"
 
+# Re-ensure setuptools is present after all pip installs.
+# Dependency resolution during the installs above can silently remove setuptools,
+# which breaks torchmetrics (imports pkg_resources at runtime).
+echo "  Verifying setuptools (pkg_resources)..."
+$PIP install setuptools 2>/dev/null
+$PYTHON -c "import pkg_resources; print(f'    setuptools {pkg_resources.get_distribution(\"setuptools\").version}')"
+
 echo ""
 echo "  [Installed packages summary]"
 $PIP list | grep -E "torch|tensorflow|openwakeword|speechbrain|piper" || true
