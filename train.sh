@@ -94,9 +94,56 @@ fi
 if command -v nvcc &> /dev/null; then
     echo "  CUDA (nvcc): $(nvcc --version 2>/dev/null | grep release | awk '{print $6}' | tr -d ',')"
 else
-    echo "  nvcc not found - CUDA toolkit not installed?"
+    echo "  nvcc not found (OK - PyTorch bundles its own CUDA runtime)"
 fi
 echo ""
+
+# CUDA compute verification
+# nvidia-smi only needs the display driver; CUDA apps also need nvidia-uvm + device nodes.
+# The ISO's nvidia-uvm-init.service handles loading at boot. Here we just verify.
+if command -v nvidia-smi &> /dev/null; then
+    echo "[CUDA Compute Check]"
+    CUDA_READY=true
+
+    if lsmod | grep -q nvidia_uvm; then
+        echo "  nvidia-uvm module: loaded"
+    else
+        echo "  nvidia-uvm module: NOT LOADED"
+        echo "    The nvidia-uvm kernel module must be loaded for GPU compute."
+        echo "    Fix: sudo modprobe nvidia-uvm"
+        CUDA_READY=false
+    fi
+
+    if [ -e /dev/nvidia-uvm ]; then
+        echo "  /dev/nvidia-uvm:   present"
+    else
+        echo "  /dev/nvidia-uvm:   MISSING"
+        echo "    Device node must exist for CUDA. Check that nvidia-uvm-init.service ran."
+        CUDA_READY=false
+    fi
+
+    if [ -e /dev/nvidia0 ]; then
+        echo "  /dev/nvidia0:      present"
+    else
+        echo "  /dev/nvidia0:      MISSING"
+        CUDA_READY=false
+    fi
+
+    if [ "$CUDA_READY" = false ]; then
+        echo ""
+        echo "  CUDA compute prerequisites are missing. GPU training will NOT work."
+        echo "  If running from a custom live ISO, check: systemctl status nvidia-uvm-init"
+        echo ""
+        read -p "  Continue anyway (CPU-only, much slower)? [y/N] " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "  Exiting."
+            exit 1
+        fi
+    fi
+
+    echo ""
+fi
 
 # Disk space check
 echo "[Disk Space]"
@@ -307,7 +354,7 @@ PYTHON="$PWD/venv/bin/python3"
 PIP="$PYTHON -m pip"
 echo "  Python: $PYTHON"
 echo "  Upgrading pip..."
-$PIP install --upgrade pip wheel setuptools
+$PIP install --upgrade pip wheel "setuptools<71"
 echo "  Installing numpy, scipy, tqdm..."
 $PIP install "numpy<2.0" scipy tqdm
 echo "  [Step 0/6] DONE"
@@ -390,8 +437,31 @@ fi
 echo "  Installing PyTorch stack (pinned versions)..."
 echo "    torch==1.13.1 torchaudio==0.13.1"
 $PIP install torch==1.13.1 torchaudio==0.13.1
-echo "  Verifying PyTorch..."
-$PYTHON -c "import torch; print(f'    torch {torch.__version__} - CUDA available: {torch.cuda.is_available()}')"
+echo "  Verifying PyTorch + CUDA..."
+CUDA_AVAIL=$($PYTHON -c "import torch; avail = torch.cuda.is_available(); print(f'    torch {torch.__version__} - CUDA available: {avail}'); exit(0 if avail else 1)" 2>&1) || true
+echo "$CUDA_AVAIL"
+
+if echo "$CUDA_AVAIL" | grep -q "CUDA available: False"; then
+    echo ""
+    echo "  =============================================="
+    echo "  WARNING: CUDA NOT AVAILABLE"
+    echo "  =============================================="
+    echo "  nvidia-smi sees the GPU but PyTorch cannot use it."
+    echo "  Training will fall back to CPU (MUCH slower)."
+    echo ""
+    echo "  Diagnostics:"
+    echo "    nvidia-uvm loaded: $(lsmod | grep -q nvidia_uvm && echo 'yes' || echo 'NO')"
+    echo "    /dev/nvidia-uvm:   $([ -e /dev/nvidia-uvm ] && echo 'exists' || echo 'MISSING')"
+    echo "    /dev/nvidia0:      $([ -e /dev/nvidia0 ] && echo 'exists' || echo 'MISSING')"
+    echo ""
+    read -p "  Continue without GPU? [y/N] " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "  Exiting. Fix CUDA setup and try again."
+        exit 1
+    fi
+    echo ""
+fi
 
 echo "  Installing TensorFlow stack (pinned versions)..."
 echo "    tensorflow-cpu==2.8.1 protobuf==3.20.3"
@@ -415,7 +485,7 @@ $PYTHON -c "import openwakeword; print(f'    openwakeword installed')"
 # Dependency resolution during the installs above can silently remove setuptools,
 # which breaks torchmetrics (imports pkg_resources at runtime).
 echo "  Verifying setuptools (pkg_resources)..."
-$PIP install setuptools 2>/dev/null
+$PIP install "setuptools<71" 2>/dev/null
 $PYTHON -c "import pkg_resources; print(f'    setuptools {pkg_resources.get_distribution(\"setuptools\").version}')"
 
 echo ""
