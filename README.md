@@ -1,3 +1,7 @@
+(*Update 02 March 2026: Looks like I had a pretty serious omission / misconfiguration of the script that downloads the big training data tar ball from huggingface.co. I made some fixes and as of today have confirmed a full start to finish run using the instructions in this repo. Apologies for anyone who got snagged on my errors.*)
+
+
+
 # OpenWakeWord Custom Wake Word Training (Dockerized)
 
 Train your own custom wake word model for [OpenWakeWord](https://github.com/briankelley/openWakeWord) (containerized).
