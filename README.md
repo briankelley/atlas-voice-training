@@ -23,8 +23,8 @@ All packages and dependencies are handled inside the container.
 ## Quick Start
 
 ```bash
-git clone https://github.com/briankelley/atlas-voice.git
-cd atlas-voice
+git clone https://github.com/briankelley/atlas-voice-training.git
+cd atlas-voice-training
 ./train-wakeword.sh
 ```
 
@@ -123,6 +123,7 @@ The output is an ONNX model and a TFLite model, both under 250KB.
 | File | Purpose |
 |------|---------|
 | `train-wakeword.sh` | What you run - interactive host wrapper (run this on your rig) |
+| `train.sh` | Bare-metal path - installs and runs everything natively without Docker |
 | `container-entrypoint.sh` | Runs inside the Docker container |
 | `Dockerfile.training` | Builds the training environment |
 | `validate_model.py` | Compare model accuracy against test data |
