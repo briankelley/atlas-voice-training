@@ -191,6 +191,62 @@ fi
 echo ""
 
 # =============================================================================
+# Set up embedding models and TTS model (extracted from tarball or /data mount)
+# =============================================================================
+MODELS_DIR="/app/openWakeWord/openwakeword/resources/models"
+TTS_DIR="/app/piper-sample-generator/models"
+
+# Embedding models
+if [ ! -f "$MODELS_DIR/embedding_model.onnx" ]; then
+    # Check workspace (standalone tarball extraction) or /data mount (local mode)
+    if [ -d "$WORKSPACE/embedding_models" ]; then
+        echo "[Models] Moving embedding models from tarball extraction..."
+        for model_file in embedding_model.onnx embedding_model.tflite melspectrogram.onnx melspectrogram.tflite; do
+            if [ -f "$WORKSPACE/embedding_models/$model_file" ]; then
+                mv "$WORKSPACE/embedding_models/$model_file" "$MODELS_DIR/$model_file"
+            else
+                echo "  ERROR: Missing embedding_models/$model_file from tarball."
+                exit 1
+            fi
+        done
+        rmdir "$WORKSPACE/embedding_models" 2>/dev/null || true
+    elif [ -d "/data/embedding_models" ]; then
+        echo "[Models] Copying embedding models from /data mount..."
+        for model_file in embedding_model.onnx embedding_model.tflite melspectrogram.onnx melspectrogram.tflite; do
+            if [ -f "/data/embedding_models/$model_file" ]; then
+                cp "/data/embedding_models/$model_file" "$MODELS_DIR/$model_file"
+            else
+                echo "  ERROR: Missing /data/embedding_models/$model_file"
+                exit 1
+            fi
+        done
+    else
+        echo "  ERROR: Embedding models not found in tarball extraction or /data mount."
+        exit 1
+    fi
+else
+    echo "[Models] Embedding models already present."
+fi
+
+# TTS model
+if [ ! -f "$TTS_DIR/en-us-libritts-high.pt" ]; then
+    if [ -f "$WORKSPACE/piper_tts_model/en-us-libritts-high.pt" ]; then
+        echo "[Models] Moving TTS model from tarball extraction..."
+        mv "$WORKSPACE/piper_tts_model/en-us-libritts-high.pt" "$TTS_DIR/en-us-libritts-high.pt"
+        rmdir "$WORKSPACE/piper_tts_model" 2>/dev/null || true
+    elif [ -f "/data/piper_tts_model/en-us-libritts-high.pt" ]; then
+        echo "[Models] Copying TTS model from /data mount..."
+        cp "/data/piper_tts_model/en-us-libritts-high.pt" "$TTS_DIR/en-us-libritts-high.pt"
+    else
+        echo "  ERROR: TTS model not found in tarball extraction or /data mount."
+        exit 1
+    fi
+else
+    echo "[Models] TTS model already present."
+fi
+echo ""
+
+# =============================================================================
 # Verify all required files are present
 # =============================================================================
 echo "[Verify] Checking required files..."

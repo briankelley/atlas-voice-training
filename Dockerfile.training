@@ -102,29 +102,11 @@ RUN git clone https://github.com/briankelley/piper-sample-generator /app/piper-s
     && cd /app/piper-sample-generator && git checkout f1988a4d54eddb23d99e86f0adfef6226a85acc7 \
     && sed -i 's/_LOGGER.debug/_LOGGER.info/' /app/piper-sample-generator/generate_samples.py
 
-# HuggingFace token for private dataset downloads
-ARG HF_TOKEN
-
-# Download embedding models (from owned HuggingFace dataset)
+# Embedding models and TTS model are bundled in the training data tarball.
+# They get extracted and placed at runtime by container-entrypoint.sh
+# (from tarball in standalone mode, or from /data mount in local mode).
 RUN mkdir -p /app/openWakeWord/openwakeword/resources/models \
-    && wget -q --header="Authorization: Bearer ${HF_TOKEN}" \
-        -O /app/openWakeWord/openwakeword/resources/models/embedding_model.onnx \
-        "https://huggingface.co/datasets/briankelley/atlas-voice-training-data/resolve/main/embedding_models/embedding_model.onnx" \
-    && wget -q --header="Authorization: Bearer ${HF_TOKEN}" \
-        -O /app/openWakeWord/openwakeword/resources/models/embedding_model.tflite \
-        "https://huggingface.co/datasets/briankelley/atlas-voice-training-data/resolve/main/embedding_models/embedding_model.tflite" \
-    && wget -q --header="Authorization: Bearer ${HF_TOKEN}" \
-        -O /app/openWakeWord/openwakeword/resources/models/melspectrogram.onnx \
-        "https://huggingface.co/datasets/briankelley/atlas-voice-training-data/resolve/main/embedding_models/melspectrogram.onnx" \
-    && wget -q --header="Authorization: Bearer ${HF_TOKEN}" \
-        -O /app/openWakeWord/openwakeword/resources/models/melspectrogram.tflite \
-        "https://huggingface.co/datasets/briankelley/atlas-voice-training-data/resolve/main/embedding_models/melspectrogram.tflite"
-
-# Download TTS model for piper-sample-generator (from owned HuggingFace dataset)
-RUN mkdir -p /app/piper-sample-generator/models \
-    && wget -q --header="Authorization: Bearer ${HF_TOKEN}" \
-        -O /app/piper-sample-generator/models/en-us-libritts-high.pt \
-        "https://huggingface.co/datasets/briankelley/atlas-voice-training-data/resolve/main/piper_tts_model/en-us-libritts-high.pt"
+    && mkdir -p /app/piper-sample-generator/models
 
 # Create directories for mounted data and output
 RUN mkdir -p /data /output /workspace
