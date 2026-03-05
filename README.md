@@ -1,7 +1,6 @@
 Now that AI handles the syntax, a programmer's real job is articulating intent - translating an idea for an app into plain language for the model to execute. Instead of pounding that out on a keyboard, why not just talk to your computer? This repository is a Dockerized training pipeline for custom audio trigger models (compatible with OpenAI Whisper and [Faster Whisper](https://github.com/SYSTRAN/faster-whisper)). Define vocal shortcuts, wake words, or navigational phrases like "Hey Dummy", "Ok Computer", "Hey Jarvis", then use them with [Atlas Voice](https://github.com/briankelley/atlas-voice) or your own client-side app.
 
 # OpenWakeWord Custom Wake Word Training
-(dockerized and native)
 
 ### The Dependency Problem
 
