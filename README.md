@@ -4,7 +4,7 @@ Now that AI handles the syntax, a programmer's real job is articulating intent -
 
 ### The Dependency Problem
 
-This project exists because training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that have since aged out of compatibility with modern Python. The `train-wakeword.sh` script will build a complete dockerized training solution. The `train.sh` script does the exact same thing, but installs native dependencies with no docker requirement. Both scripts freezes the working environment of openWakeWord to commit 368c037 (main on February 1, 2026).
+This project exists because training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that have since aged out of compatibility with modern Python. The `train-wakeword.sh` script will build a complete dockerized training solution. The `train.sh` script does the exact same thing, but installs native dependencies with no docker requirement. Both scripts freeze the working environment of openWakeWord to commit 368c037 (main on February 1, 2026).
 
 ### Objective
 
