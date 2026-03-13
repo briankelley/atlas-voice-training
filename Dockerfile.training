@@ -20,6 +20,7 @@ FROM nvidia/cuda:11.7.1-cudnn8-runtime-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 ENV PYTHONUNBUFFERED=1
+ENV MALLOC_ARENA_MAX=2
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -91,6 +92,9 @@ RUN python3.10 -m pip install \
     librosa \
     pyyaml \
     huggingface_hub
+
+# Pin onnxruntime before openWakeWord install (setup.py allows >=1.10.0,<2)
+RUN python3.10 -m pip install onnxruntime==1.23.2
 
 # Clone openWakeWord (pinned to known working commit, from owned fork)
 RUN git clone https://github.com/briankelley/openWakeWord /app/openWakeWord \

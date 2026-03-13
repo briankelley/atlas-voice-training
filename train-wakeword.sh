@@ -31,6 +31,7 @@ for arg in "$@"; do
     case "$arg" in
         --rebuild) REBUILD=true ;;
         --standalone) STANDALONE=true ;;
+        --preflight) PREFLIGHT_ONLY=true ;;
     esac
 done
 
@@ -44,23 +45,88 @@ fi
 # =========================================================================
 
 # Check for NVIDIA GPU
-if ! command -v nvidia-smi &>/dev/null; then
-    echo "ERROR: nvidia-smi not found. GPU required for training."
+GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
+if [ -z "$GPU_NAME" ]; then
+    echo "  GPU:                  FAILED -- nvidia-smi not found"
+    echo ""
+    echo "  GPU required for training."
     exit 1
+else
+    echo "  GPU:                  $GPU_NAME"
 fi
 
-if ! docker info 2>/dev/null | grep -q "Runtimes.*nvidia\|Default Runtime.*nvidia"; then
-    if ! dpkg -l nvidia-container-toolkit &>/dev/null 2>&1; then
-        echo "WARNING: nvidia-container-toolkit may not be installed."
-        echo "  Install with: sudo apt install nvidia-container-toolkit"
-        echo "  Then restart Docker: sudo systemctl restart docker"
-        echo ""
-        read -p "  Try anyway? [y/N] " -r
-        if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
-            echo "Aborted."
-            exit 0
-        fi
+# Check Docker is running
+if ! docker info &>/dev/null; then
+    echo "  Docker:               FAILED"
+    echo ""
+    if ! systemctl is-active --quiet docker 2>/dev/null; then
+        echo "  Docker service is not running."
+        echo "  Fix: sudo systemctl start docker"
+    elif ! groups | grep -q docker; then
+        echo "  Your user is not in the 'docker' group."
+        echo "  Fix: sudo usermod -aG docker \$USER"
+        echo "  Then log out and back in (or run: newgrp docker)"
+    else
+        echo "  Docker may not be installed."
+        echo "  See: https://docs.docker.com/engine/install/"
     fi
+    exit 1
+else
+    DOCKER_VER=$(docker --version 2>/dev/null | sed 's/Docker version //' | cut -d, -f1)
+    echo "  Docker:               $DOCKER_VER"
+fi
+
+# Check NVIDIA container runtime
+NVIDIA_PREFLIGHT_OK=true
+
+if ! dpkg -l nvidia-container-toolkit 2>/dev/null | grep -q ^ii; then
+    echo "  NVIDIA runtime:       FAILED -- not installed"
+    echo ""
+    echo "  nvidia-container-toolkit lets Docker containers access the GPU."
+    echo ""
+    echo "  Install it:"
+    echo "    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
+    echo "    echo \"deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/\$(dpkg --print-architecture) /\" | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list"
+    echo "    sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit"
+    echo "    sudo nvidia-ctk runtime configure --runtime=docker"
+    echo "    sudo systemctl restart docker"
+    echo ""
+    NVIDIA_PREFLIGHT_OK=false
+elif ! docker info 2>/dev/null | grep -q "Runtimes.*nvidia\|Default Runtime.*nvidia"; then
+    echo "  NVIDIA runtime:       FAILED -- not configured"
+    echo ""
+    echo "  nvidia-container-toolkit is installed but Docker is not configured to use it."
+    echo ""
+    echo "  Fix:"
+    echo "    sudo nvidia-ctk runtime configure --runtime=docker"
+    echo "    sudo systemctl restart docker"
+    echo ""
+    NVIDIA_PREFLIGHT_OK=false
+else
+    echo "  NVIDIA runtime:       OK"
+fi
+
+# Check Docker image
+if docker image inspect "$IMAGE_NAME" &>/dev/null; then
+    IMG_CREATED=$(docker image inspect "$IMAGE_NAME" --format '{{.Created}}' 2>/dev/null | cut -dT -f1)
+    echo "  Docker image:         built $IMG_CREATED"
+else
+    echo "  Docker image:         not built (will build on first run)"
+fi
+
+echo ""
+
+if [ "$NVIDIA_PREFLIGHT_OK" = false ]; then
+    read -p "  Try anyway? [y/N] " -r
+    if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+    echo ""
+fi
+
+if [ "${PREFLIGHT_ONLY:-false}" = true ]; then
+    exit 0
 fi
 
 # Check for required files in local mode
@@ -80,7 +146,25 @@ if ! docker image inspect "$IMAGE_NAME" &>/dev/null || [ "$REBUILD" == "true" ];
     echo "Building Docker image (this takes a few minutes the first time)..."
     echo ""
     cd "$SCRIPT_DIR"
+    set +e
     docker build -f Dockerfile.training -t "$IMAGE_NAME" .
+    BUILD_EXIT=$?
+    set -e
+
+    if [ $BUILD_EXIT -ne 0 ]; then
+        echo ""
+        echo "ERROR: Docker build failed."
+        echo ""
+        echo "  If the error mentions 'content store' or"
+        echo "  'failed to get reader', run:"
+        echo ""
+        echo "    docker system prune -a"
+        echo "    docker buildx prune -a"
+        echo ""
+        echo "  Then rerun this script."
+        exit 1
+    fi
+
     echo ""
     echo "Docker image built successfully."
     echo ""
@@ -100,6 +184,11 @@ echo ""
 echo "The training environment is ready. Next we need"
 echo "to download ~20 GB of training data to train a"
 echo "custom wake word model."
+echo ""
+echo "  Source: $TARBALL_URL"
+echo ""
+echo "You can open that URL in a browser to inspect"
+echo "the dataset before downloading."
 echo ""
 
 read -p "Do you want to proceed? [y/N] " -r
@@ -135,6 +224,31 @@ fi
 # Derive model name from wake word (lowercase, spaces to underscores)
 MODEL_NAME=$(echo "$WAKE_WORD" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
 
+# --- Shared memory ---
+# Docker defaults /dev/shm to 64MB which is too small for PyTorch DataLoader.
+# Auto-detect a reasonable size based on available RAM.
+TOTAL_RAM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo)
+AUTO_SHM=$((TOTAL_RAM_GB / 4))
+# Floor at 2, cap at 32
+[ "$AUTO_SHM" -lt 2 ] && AUTO_SHM=2
+[ "$AUTO_SHM" -gt 32 ] && AUTO_SHM=32
+
+echo "----------------------------------------------"
+echo "  Docker Shared Memory"
+echo "----------------------------------------------"
+echo ""
+echo "PyTorch's data loader needs more shared memory"
+echo "than Docker's 64 MB default. This setting controls"
+echo "how much of your system RAM the container is"
+echo "allowed to use for shared memory."
+echo ""
+echo "  System RAM detected:  ${TOTAL_RAM_GB} GB"
+echo "  Recommended:          ${AUTO_SHM} GB"
+echo ""
+read -p "Shared memory in GB [default: $AUTO_SHM]: " INPUT
+SHM_SIZE="${INPUT:-$AUTO_SHM}g"
+echo ""
+
 # --- Training settings ---
 # Defaults (Jan 30 model - best balance of accuracy and recall)
 N_SAMPLES=50000
@@ -156,7 +270,7 @@ echo "  Augmentation rounds:  $AUGMENTATION_ROUNDS"
 echo "  Training steps:       $TRAINING_STEPS"
 echo "  Layer size (neurons): $LAYER_SIZE"
 echo ""
-read -p "Use recommended settings? (select \"n\" for descriptions) [Y/n] " -r
+read -p "Use recommended settings? (select \"n\" for more info) [Y/n] " -r
 echo ""
 
 if [[ "$REPLY" =~ ^[Nn]$ ]]; then
@@ -241,6 +355,7 @@ echo "  Ready to Train"
 echo "----------------------------------------------"
 echo ""
 echo "  Wake word:           \"$WAKE_WORD\""
+echo "  Shared memory:       $SHM_SIZE"
 echo "  Samples:             $N_SAMPLES"
 echo "  Augmentation rounds: $AUGMENTATION_ROUNDS"
 echo "  Training steps:      $TRAINING_STEPS"
@@ -264,7 +379,7 @@ echo ""
 
 DOCKER_ARGS=(
     --gpus all
-    --shm-size=32g
+    --shm-size=$SHM_SIZE
     --name "$CONTAINER_NAME"
     --rm
     -v "$OUTPUT_DIR:/output:rw"
