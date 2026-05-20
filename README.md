@@ -18,6 +18,8 @@ Builds a Docker container, downloads training data, generates synthetic speech s
 
 All packages and dependencies are handled inside the container.
 
+If you use the bare-metal `train.sh` path instead, you also need **Python 3.10** on the host (`python3.10`, `python3.10-venv`, `python3.10-dev`). PyTorch 1.13.1 and TensorFlow 2.8.1 only ship cp310 wheels - Python 3.11+ will fail at the pip install step. On Ubuntu-based systems the script can install 3.10 from the deadsnakes PPA for you.
+
 ### Quick Start
 
 ```bash

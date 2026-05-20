@@ -170,7 +170,8 @@ if ! command -v gcc &> /dev/null; then
 fi
 
 # Determine which Python to use
-# Priority: existing venv > python3.10 > python3.11 > python3 (with warning)
+# Priority: existing venv > python3.10 > python3 (with warning)
+# Note: torch==1.13.1 / torchaudio==0.13.1 only ship cp310 wheels - Python 3.11+ is unsupported.
 PYTHON_CMD=""
 VENV_EXISTS=false
 
@@ -178,12 +179,12 @@ if [ -d "venv" ] && [ -f "venv/bin/python" ]; then
     VENV_EXISTS=true
     VENV_PY_VERSION=$(venv/bin/python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
     echo "  Existing venv detected: Python $VENV_PY_VERSION"
-    if [[ "$VENV_PY_VERSION" == "3.10" || "$VENV_PY_VERSION" == "3.11" ]]; then
+    if [[ "$VENV_PY_VERSION" == "3.10" ]]; then
         echo "  Venv Python version is compatible. Proceeding."
         PYTHON_CMD="python3"  # Will use venv after activation
     else
-        echo "  WARNING: Existing venv uses Python $VENV_PY_VERSION (untested)"
-        read -p "  Delete venv and recreate with compatible Python? [Y/n] " -n 1 -r
+        echo "  WARNING: Existing venv uses Python $VENV_PY_VERSION (only 3.10 is supported)"
+        read -p "  Delete venv and recreate with Python 3.10? [Y/n] " -n 1 -r
         echo ""
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             rm -rf venv
@@ -193,7 +194,7 @@ if [ -d "venv" ] && [ -f "venv/bin/python" ]; then
 fi
 
 if [ "$VENV_EXISTS" = false ]; then
-    # No venv - find best available Python
+    # No venv - require Python 3.10 (only version with torch 1.13.1 wheels)
     if command -v python3.10 &> /dev/null; then
         PYTHON_CMD="python3.10"
         echo "  Found python3.10 - will use for venv"
@@ -207,21 +208,8 @@ if [ "$VENV_EXISTS" = false ]; then
             echo "  python3.10-dev not installed"
             MISSING_PKGS="$MISSING_PKGS python3.10-dev"
         fi
-    elif command -v python3.11 &> /dev/null; then
-        PYTHON_CMD="python3.11"
-        echo "  Found python3.11 - will use for venv"
-        # Check if python3.11-venv is installed
-        if ! $PYTHON_CMD -c "import ensurepip" 2>/dev/null; then
-            echo "  python3.11-venv not installed"
-            MISSING_PKGS="$MISSING_PKGS python3.11-venv"
-        fi
-        # Check if python3.11-dev is installed (needed for compiling C extensions)
-        if [ ! -f "/usr/include/python3.11/Python.h" ]; then
-            echo "  python3.11-dev not installed"
-            MISSING_PKGS="$MISSING_PKGS python3.11-dev"
-        fi
     else
-        # No python3.10 or python3.11 found
+        # No python3.10 found
         PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
         echo "  System Python: $PY_VERSION (not compatible)"
         echo ""
@@ -229,11 +217,11 @@ if [ "$VENV_EXISTS" = false ]; then
         echo "  PYTHON VERSION ISSUE"
         echo "  =============================================="
         echo ""
-        echo "  This script requires Python 3.10 or 3.11."
+        echo "  This script requires Python 3.10."
         echo "  Your system has Python $PY_VERSION which is NOT compatible."
         echo ""
-        echo "  PyTorch 1.13.1 and TensorFlow 2.8.1 do not have wheels"
-        echo "  for Python $PY_VERSION. Training WILL fail."
+        echo "  PyTorch 1.13.1 and TensorFlow 2.8.1 only ship cp310 wheels."
+        echo "  No upstream wheels exist for Python 3.11+. Training WILL fail."
         echo ""
 
         # Check if we can offer auto-install (apt-based systems)
@@ -283,7 +271,7 @@ if [ "$VENV_EXISTS" = false ]; then
         else
             # Non-apt system, can't auto-install
             echo "  Cannot auto-install on this system (no apt)."
-            echo "  Please install Python 3.10 or 3.11 manually."
+            echo "  Please install Python 3.10 manually."
             echo ""
             echo "  =============================================="
             echo ""
