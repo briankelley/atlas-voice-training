@@ -1,14 +1,16 @@
-Now that AI handles the syntax, a programmer's real job is articulating intent - translating an idea for an app into plain language for the model to execute. Instead of pounding that out on a keyboard, why not just talk to your computer? This repository is a Dockerized training pipeline for custom audio trigger models (compatible with OpenAI Whisper and [Faster Whisper](https://github.com/SYSTRAN/faster-whisper)). Define vocal shortcuts, wake words, or navigational phrases like "Hey Dummy", "Ok Computer", "Hey Jarvis", then use them with [Atlas Voice](https://github.com/briankelley/atlas-voice) or your own client-side app.
+The reason for this repo is pretty straight forward: you're using [Atlas Voice](https://github.com/briankelley/atlas-voice) or your own custom rolled voice assistant and saying "Hey Jarvis" feels a bit to Hollywood fanboi-ish. This repo will allow you to train whatever word you want to use. It's a Dockerized (and native linux) training pipeline for custom audio trigger models. Compatible with OpenAI Whisper and [Faster Whisper](https://github.com/SYSTRAN/faster-whisper) and based on the outstanding [OpenWakeWord](https://github.com/dscripka/openWakeWord) work by David Scripka.
+
+_If you want to skip all the formalities of training and use "Hey Atlas" as your trigger word, see "Releases" in the right pane. Both the `.onnx` and `.tflite` models can be downloaded._
 
 # OpenWakeWord Custom Wake Word Training
 
 ### The Dependency Problem
 
-This project exists because training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that have since aged out of compatibility with modern Python. The `train-wakeword.sh` script will build a complete dockerized training solution. The `train.sh` script does the exact same thing, but installs native dependencies with no docker requirement. Both scripts freeze the working environment of openWakeWord to commit 368c037 (main on February 1, 2026).
+Training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that have since aged out of compatibility with modern Python. The `train-wakeword.sh` script will build a complete dockerized training solution. The `train.sh` script does the exact same thing, but installs native dependencies with no docker requirement. Both scripts freeze the working environment of openWakeWord to commit 368c037 (main on February 1, 2026).
 
 ### Objective
 
-Builds a Docker container, downloads training data, generates synthetic speech samples, augments them with common noise, trains a neural network, and outputs a model file (~200KB) that can listen for your wake word.
+To build a Docker container that downloads training data, generates synthetic speech samples, augments them with common noise, trains a neural network, and outputs a model file (~200KB) that can listen for your custom trigger word.
 
 ### Requirements
 
